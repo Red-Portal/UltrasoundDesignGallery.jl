@@ -1,89 +1,108 @@
 
 using Test
-using Statistics
-using Distributions
-using LinearAlgebra
-using Random
-using StatsFuns
 
+import ForwardDiff
 import Calculus
 import PDMats
-import Optim
 
-function logbtl(goodness::Array{Float64, 2},
-                scale::Float64)
-    # goodness ∈ R^{npoints, ncandidates} 
-    # Only compute the preference of the "choices"
-    scaled  = goodness / scale
-    logpref = scaled[:,1] - logsumexp(scaled, dims=2)[:,1]
-    sum(logpref)
+include("../src/UltrasoundVisualGallery.jl")
+
+function compute_gram_matrix(data, ℓ², σ², ϵ²)
+    kernel = construct_kernel(ℓ², σ²)
+    K    = KernelFunctions.kernelmatrix(
+        kernel, reshape(data, (size(data,1),:)), obsdim=2)
+    K    = K + ϵ²*I
+    K    = PDMats.PDMat(K)
+    Kinv = inv(K)
+    K, Kinv
 end
 
-function logbtl_full(goodness::Array{Float64, 2},
-                     scale::Float64)
-    # goodness ∈ R^{npoints, ncandidates} 
-    # Compute the preferences of all entries
-    scaled  = goodness / scale
-    logpref = scaled .- logsumexp(scaled, dims=2)[:,1]
-    return logpref
+function pseudo_marginal(prng, Nimp, scale, ℓ², σ², ϵ², initial_latent)
+    K, Kinv  = compute_gram_matrix(data, ℓ², σ², ϵ²)
+    μ_f, Σ_f = laplace_approximation(K, scale, initial_latent)
+
+    q         = MvNormal(μ_f, Σ_f)
+    f_samples = rand(prng, q, Nimp)
+
+    joint   = [logjoint_prob(K, Kinv, latent, scale) for latent in f_samples]
+    logpml  = logsumexp(joint - logpdf.(Ref(q), f_samples)) - log(Nimp)
+    logpml, f_samples
 end
 
-@inline function ∇logbtl(logpref::Array{Float64, 2},
-                 scale::Float64)
-    pref   = exp.(logpref)
-    result = zeros(size(logpref))
-    
-    # first column derivative
-    choices = pref[:,1]
-    ∇choice = (1 .- choices) / scale
-    result[:,1] = ∇choice
+function pmmh(prng, priors)
+    samples = 1024
+    latent  = randn()
+    σ       = 1.0
+    Nimp    = 1
 
-    # first column derivative
-    comps  = pref[:,2:end]
-    ∇comp  = comps / -scale
-    result[:,2:end] = ∇comp
-    return reshape(result, :)
-end
+    θ_samples     = zeros(4, samples) 
+    f_samples     = zeros(length(latent), samples)
+    prev_logprior = -Inf
+    prev_logpml   = -Inf
+    prev_latent   = deepcopy(latent)
+    for i = 1:samples
+        prop_θ = prev_θ + randn(prng, size(θ)) * σ
+        prop_logpml, prop_latents = pseudo_marginal(prng, Nimp, prop_θ[1],
+                                                    prop_θ[2], prop_θ[3],
+                                                    prop_θ[4], latent)
+        prop_logprior = sum(logpdf.(priors, θ))
+        α = min(prop_logpml + prop_logprior - prev_logpml - prev_logprior, 0)
 
-@inline function ∇²logbtl(logpref::Array{Float64, 2},
-                          scale::Float64)
-    # logpref ∈ R^{npoints, ncandidates} 
-    # logpref[:,1]     are the choices
-    # logpref[:,2:end] are the compared candidates
-    pref    = exp.(logpref)
-    ∇btl    = ∇logbtl(logpref, scale)
-    ∇btl    = reshape(∇btl, size(logpref))
-
-    # hessian
-    ndata  = size(logpref, 1)
-    ncand  = size(logpref, 2)
-    total  = prod(size(logpref))
-    result = zeros(total, total)
-    @inbounds for entry_i = 1:ncand
-        @inbounds for entry_j = entry_i:ncand
-            @simd for block = 1:ndata
-                i = (entry_i - 1) * ndata + block
-                j = (entry_j - 1) * ndata + block
-
-                ∇btl_i_j = begin
-                    if(entry_i != 1 && entry_i == entry_j)
-                        ∇btl[block, entry_j] + 1 / scale
-                    else
-                        ∇btl[block, entry_j]
-                    end
-                end
-
-                result[i, j] = pref[block, entry_i] * ∇btl_i_j / -scale
-            end
+        if(log(rand(prng)) < α)
+            prev_logprior  = prop_logprior
+            prev_logpml    = prop_logpml
+            θ_samples[:,i] = prop_θ
+            f_samples[:,i] = latents[1]
+        else
+            θ_samples[:,i] = prev_θ
+            f_samples[:,i] = prev_latents[1]
         end
     end
-    return Symmetric(result)
+end
+
+function test_laplace_approx()
+    npoints  = 30
+    ncand    = 5
+    prng     = MersenneTwister(1)
+    scale    = 1.0
+    dims     = 1
+
+    ℓ²  = 0.1
+    σ²  = 1.0  
+    ϵ²  = 0.1
+
+    testpoints = rand(prng, dims, npoints, ncand)
+    goodness   = sinc.((testpoints .- 0.5)*4*π)[1,:,:] + randn(prng, size(testpoints)[2:3]) * 0.1
+    orders     = [sortperm(goodness[i,:], rev=true) for i = 1:npoints]
+
+    for i = 1:npoints
+        goodness[i,:]     = goodness[i, orders[i]] 
+        testpoints[:,i,:] = testpoints[:, i, orders[i]] 
+    end
+
+    initial_latent = randn(prng, npoints, ncand)
+
+    println("initial likelihood = ", logbtl(initial_latent, scale))
+    println("true    likelihood = ", logbtl(goodness, scale))
+
+    begin
+        kernel = construct_kernel(ℓ², σ²)
+        K = KernelFunctions.kernelmatrix(
+            kernel, reshape(testpoints, (size(testpoints,1),:)), obsdim=2)
+        K = K + ϵ²*I
+        #display(Plots.heatmap(K))
+
+        @time latent, Σ = laplace_approximation(K, scale, initial_latent)
+
+        display(Plots.scatter(reshape(testpoints, :), reshape(latent, :)))
+        display(Plots.scatter!(reshape(testpoints, :), reshape(goodness, :)))
+    end
 end
 
 function test_derivative()
     goodness = randn(MersenneTwister(1), 10, 4)
     scale    = 0.1
-    
+
     begin
         logpref = logbtl_full(goodness, scale)
         g       = ∇logbtl(logpref, scale)
@@ -96,7 +115,9 @@ function test_derivative()
 
     begin
         logpref = logbtl_full(goodness, scale)
-        H       = ∇²logbtl(logpref, scale)
+        g       = ∇logbtl(logpref, scale)
+        g       = reshape(g, size(logpref))
+        H       = ∇²logbtl(logpref, g, scale)
         H_num   = Calculus.hessian(x->begin
                                    x = reshape(x, (10, 4))
                                    l = logbtl(x, scale)
@@ -105,22 +126,3 @@ function test_derivative()
         @test norm(H - H_num, Inf) < 0.001
     end
 end
-
-function marginal_log_likelihood(data, latent, scale, param)
-    data    = randn(10, 3)
-    latent  = reshape(latent, size(data))
-    loglike = btl(data, latent, scale)
-    ∇²btl(data, goodness, scale)
-end
-
-# function laplace_approximation(f, ∇L, K, W)
-#     K    = PDMats.PDMat(K)
-#     Kinv = inv(K)
-#     Hq   = (-W - Linv.mat) 
-#     ∇q   = W*f + ∇L
-
-#     latent = 
-#     loglike, ∇loglike, ∇²loglike = loglikelihood(latent, scale)
-
-#     function f(latent)
-# end
