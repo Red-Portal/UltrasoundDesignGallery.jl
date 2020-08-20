@@ -80,17 +80,27 @@ end
     loglike = logbtl(latent, scale)
 
     t1 = loglike 
-    t2 = quad(Kinv, reshape(latent, :)) / 2
+    t2 = PDMats.quad(Kinv, reshape(latent, :)) / 2
 
     # GPML 3.12
     t1 - t2 - t3 - t4
 end
 
-@inline function construct_kernel(ℓ², σ²)
+@inline function construct_kernel(ℓ², σ², ϵ²)
     # x ∈ R^{parameters, latents}
     k = KernelFunctions.Matern52Kernel()
     t = KernelFunctions.ScaleTransform(1/ℓ²)
-    k = σ²*KernelFunctions.transform(k, t)
+    ϵ = ϵ²*KernelFunctions.EyeKernel()
+    k = σ²*KernelFunctions.transform(k, t) + ϵ
     k
+end
+
+@inline function compute_gram_matrix(data, ℓ², σ², ϵ²)
+    kernel = construct_kernel(ℓ², σ², ϵ²)
+    K    = KernelFunctions.kernelmatrix(
+        kernel, reshape(data, (size(data,1),:)), obsdim=2)
+    K    = PDMats.PDMat(K)
+    Kinv = inv(K)
+    K, Kinv
 end
 
