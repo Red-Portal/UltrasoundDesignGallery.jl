@@ -82,7 +82,7 @@ function test_derivative()
 end
 
 function test_pmmh()
-    npoints  = 30
+    npoints  = 10
     ncand    = 5
     prng     = MersenneTwister(1)
     scale    = 1.0

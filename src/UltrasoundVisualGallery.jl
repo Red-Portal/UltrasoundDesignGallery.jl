@@ -6,6 +6,7 @@ using Random
 using StatsFuns
 
 import PDMats
+import OnlineStats
 import KernelFunctions
 import Optim
 

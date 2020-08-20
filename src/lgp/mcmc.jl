@@ -8,7 +8,8 @@
     f_shape  = size(data)[2:3]
     try 
         K, Kinv  = compute_gram_matrix(data, ℓ², σ², ϵ²)
-        μ_f, Σ_f = laplace_approximation(K, Kinv, scale, reshape(latent, f_shape))
+        μ_f, Σ_f = laplace_approximation(K, Kinv, scale, reshape(latent, f_shape);
+                                         verbose=false)
         q        = MvNormal(μ_f, Σ_f)
 
         f_sample = PDMats.unwhiten(q.Σ, u) + q.μ
@@ -49,6 +50,7 @@ function ess_transition(prng, loglike, prev_θ, prev_like, prior)
     ϵ_min = ϵ - 2*π
     ϵ_max = deepcopy(ϵ)
 
+    proposals = 1
     while(true)
         cosϵ   = cos(ϵ) 
         sinϵ   = sin(ϵ)
@@ -62,7 +64,7 @@ function ess_transition(prng, loglike, prev_θ, prev_like, prior)
         end
 
         if(prop_logp > logy)
-            return prop_θ, prop_logp
+            return prop_θ, prop_logp, proposals
         else
             if(ϵ < 0)
                 ϵ_min = deepcopy(ϵ)
@@ -70,6 +72,8 @@ function ess_transition(prng, loglike, prev_θ, prev_like, prior)
                 ϵ_max = deepcopy(ϵ)
             end
             ϵ = rand(prng, Uniform(ϵ_min, ϵ_max))
+
+            proposals += 1
         end
     end
 end
@@ -96,11 +100,14 @@ function pm_ess(prng, samples, warmup, initial_θ, initial_f, prior, scale, data
         throw(ArgumentError("Initial hyperparameters are not valid"))
     end
 
-    ProgressMeter.@showprogress for i = 1:(samples+warmup)
+    u_acc_mavg = OnlineStats.Mean()
+    θ_acc_mavg = OnlineStats.Mean()
+    prog       = ProgressMeter.Progress(samples+warmup)
+    for i = 1:(samples+warmup)
         Lu = u_in->begin
             pseudo_marginal_partial(prng, data, q, K, Kinv, scale, u_in)
         end
-        u, logpml = ess_transition(prng, Lu, u, logpml, u_prior)
+        u, logpml, u_nprop = ess_transition(prng, Lu, u, logpml, u_prior)
 
         Lθ = θ_in->begin
             θ_lin = exp.(θ_in)
@@ -108,13 +115,25 @@ function pm_ess(prng, samples, warmup, initial_θ, initial_f, prior, scale, data
                 prng, data, scale, θ_lin[1], θ_lin[2], θ_lin[3], f, u)
             logpml
         end
-        θ, logpml = ess_transition(prng, Lθ, θ, logpml, prior)
+        θ, logpml, θ_nprop = ess_transition(prng, Lθ, θ, logpml, prior)
 
         if(i > warmup)
             θ_samples[:,i-warmup]  = exp.(θ)
             f_samples[:,i-warmup]  = f
             Kinv_samples[i-warmup] = deepcopy(Kinv)
         end
+        u_acc = 1/u_nprop
+        θ_acc = 1/θ_nprop
+        OnlineStats.fit!(u_acc_mavg, u_acc)
+        OnlineStats.fit!(θ_acc_mavg, θ_acc)
+        ProgressMeter.next!(
+            prog; showvalues=[(:iteration, i),
+                              (:pseudo_marginal_loglikelihood, logpml),
+                              (:u_acceptance, u_acc),
+                              (:θ_acceptance, u_acc),
+                              (:u_average_acceptance, u_acc_mavg.μ),
+                              (:θ_average_acceptance, θ_acc_mavg.μ)
+                              ])
     end
     θ_samples, f_samples, Kinv_samples
 end
