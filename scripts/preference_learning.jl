@@ -9,16 +9,6 @@ import ProgressMeter
 
 include("../src/UltrasoundVisualGallery.jl")
 
-function compute_gram_matrix(data, ℓ², σ², ϵ²)
-    kernel = construct_kernel(ℓ², σ²)
-    K    = KernelFunctions.kernelmatrix(
-        kernel, reshape(data, (size(data,1),:)), obsdim=2)
-    K    = K + ϵ²*I
-    K    = PDMats.PDMat(K)
-    Kinv = inv(K)
-    K, Kinv
-end
-
 function test_laplace_approx()
     npoints  = 3
     ncand    = 5
@@ -83,7 +73,7 @@ end
 
 function test_pmmh()
     npoints  = 10
-    ncand    = 5
+    ncand    = 3
     prng     = MersenneTwister(1)
     scale    = 1.0
     dims     = 1
@@ -93,7 +83,7 @@ function test_pmmh()
     ϵ²  = 0.1
 
     testpoints = rand(prng, dims, npoints, ncand)
-    goodness   = sinc.((testpoints .- 0.5)*4*π)[1,:,:] + randn(prng, size(testpoints)[2:3]) * 0.01
+    goodness   = sin.((testpoints .- 0.5)*4*π)[1,:,:] + randn(prng, size(testpoints)[2:3]) * 0.1
     orders     = [sortperm(goodness[i,:], rev=true) for i = 1:npoints]
 
     for i = 1:npoints
@@ -106,8 +96,8 @@ function test_pmmh()
     priors = Product([Normal(0, 1),
                       Normal(0, 2),
                       Normal(0, 1)])
-    samples = 1024
-    warmup  = 1024
+    samples = 64
+    warmup  = 64
     θ_samples, f_samples, Kinvs = pm_ess(
         prng, samples, warmup, [ℓ², σ², ϵ²], initial_latent, priors, scale, testpoints)
 
@@ -118,6 +108,7 @@ function test_pmmh()
 
     X = reshape(testpoints, (dims, :)) 
     y = reshape(goodness, :)
-    αs = precompute_lgp(f_samples, Kinvs)
-    θ_samples, f_samples, Kinvs, αs, X, y
+    αs, ks = precompute_lgp(f_samples, θ_samples, Kinvs)
+    θ_samples, f_samples, Kinvs, αs, X, y, ks
 end
+

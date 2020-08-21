@@ -10,7 +10,9 @@ import OnlineStats
 import KernelFunctions
 import Optim
 
-include("lgp/likelihood.jl")
-include("lgp/laplace_approximation.jl")
-include("lgp/mcmc.jl")
-include("lgp/prediction.jl")
+include("latentgp/likelihood.jl")
+include("latentgp/laplace_approximation.jl")
+include("latentgp/mcmc.jl")
+include("latentgp/prediction.jl")
+include("bayesopt/bayesian_optimization.jl")
+
