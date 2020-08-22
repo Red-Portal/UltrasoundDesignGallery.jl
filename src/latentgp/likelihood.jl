@@ -1,4 +1,20 @@
 
+@inline function safe_cholesky(K::Matrix)
+    try
+        PDMats.PDMat(K)
+    catch
+        Kmax = maximum(K)
+        α    = eps(eltype(K))
+        while !isposdef(K+α*I) && α < 0.01*Kmax
+            α *= 2.0
+        end
+        if α >= 0.01*Kmax
+            throw(ErrorException("Adding noise on the diagonal was not sufficient to build a positive-definite matrix:\n\t- Check that your kernel parameters are not extreme\n\t- Check that your data is sufficiently sparse\n\t- Maybe use a different kernel"))
+        end
+        PDMats.PDMat(K+α*I)
+    end
+end
+
 function logbtl(goodness::Array{Float64, 2},
                 scale::Float64)
     # goodness ∈ R^{npoints, ncandidates} 
@@ -71,19 +87,58 @@ end
     return Symmetric(result)
 end
 
-@inline function logjoint_prob(K::PDMats.PDMat,
-                               Kinv::PDMats.PDMat,
-                               latent::Array{<:Real, 2},
-                               scale::Real)
-    t3   = logdet(K) / 2
-    t4   = size(K, 1) * log(2*π) / 2
+@inline function approx_marginallike(a::Vector,
+                                     B::LU,
+                                     latent::Array{<:Real, 2},
+                                     scale::Real)
+    # GPML 3.32
+    loglike = logbtl(latent, scale)
+    f       = reshape(latent, :)
+
+    t1 = loglike 
+    t2 = dot(f, a) / -2 
+    t3 = logdet(B) / -2
+
+    t1 + t2 + t3
+end
+
+@inline function approx_marginallike(K::Matrix,
+                                     latent::Array{<:Real, 2},
+                                     scale::Real)
+    # GPML 3.32
+    logpref = logbtl_full(latent, scale)
+    ∇ll     = ∇logbtl(logpref, scale)
+    W       = -∇²logbtl(logpref, reshape(∇ll, size(logpref)), scale)
+
+    f   = reshape(latent, :)
+    WK  = W*K
+    b   = W*f + ∇ll
+    B   = I + WK
+    Blu = lu(B)
+    a   = (b - Blu \ (WK*b))
+
+    loglike = sum(logpref[:,1])
+
+    t1 = loglike 
+    t2 = dot(f, a) / -2 
+    t3 = logdet(Blu) / -2
+
+    # GPML 3.32
+    t1 + t2 + t3
+end
+
+@inline function logjointlike(K::PDMats.PDMat,
+                              latent::Array{<:Real, 2},
+                              scale::Real)
+    # GPML 3.12
+    t3 = logdet(K) / -2
+    t4 = size(K, 1) * log(2*π) / -2
     loglike = logbtl(latent, scale)
 
     t1 = loglike 
-    t2 = PDMats.quad(Kinv, reshape(latent, :)) / 2
+    t2 = PDMats.invquad(K, reshape(latent, :)) / -2
 
-    # GPML 3.12
-    t1 - t2 - t3 - t4
+    t1 + t2 + t3 + t4
 end
 
 @inline function construct_kernel(ℓ², σ², ϵ²)
@@ -95,12 +150,9 @@ end
     k
 end
 
-@inline function compute_gram_matrix(data, ℓ², σ², ϵ²)
+function compute_gram_matrix(data, ℓ², σ², ϵ²)
     kernel = construct_kernel(ℓ², σ², ϵ²)
-    K    = KernelFunctions.kernelmatrix(
+    K = KernelFunctions.kernelmatrix(
         kernel, reshape(data, (size(data,1),:)), obsdim=2)
-    K    = PDMats.PDMat(K)
-    Kinv = inv(K)
-    K, Kinv
 end
 

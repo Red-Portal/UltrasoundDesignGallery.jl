@@ -312,6 +312,12 @@ version = "0.5.5"
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 
+[[MathProgBase]]
+deps = ["LinearAlgebra", "SparseArrays"]
+git-tree-sha1 = "9abbe463a1e9fc507f12a69e7f29346c2cdc472c"
+uuid = "fdba3010-5040-5b88-9595-932c9decdf73"
+version = "0.7.8"
+
 [[Missings]]
 deps = ["DataAPI"]
 git-tree-sha1 = "de0a5ce9e5289f27df672ffabef4d1e5861247d5"
@@ -326,6 +332,18 @@ deps = ["DiffResults", "Distributed", "FiniteDiff", "ForwardDiff"]
 git-tree-sha1 = "e39c69c2138a277955e6be0a4afc7d14e4948557"
 uuid = "d41bc354-129a-5804-8e4c-c37616107c6c"
 version = "7.6.3"
+
+[[NLopt]]
+deps = ["MathProgBase", "NLopt_jll"]
+git-tree-sha1 = "48d523294d66f34d012e224ec3082d35c395ebd2"
+uuid = "76087f3c-5699-56af-9a33-bf431cd00edd"
+version = "0.6.0"
+
+[[NLopt_jll]]
+deps = ["Libdl", "Pkg"]
+git-tree-sha1 = "bdf1dcb42a7ef8eaf60b7d101a25136b213a28e1"
+uuid = "079eb43e-fd8e-5478-9966-2cf3e3edb778"
+version = "2.6.2+0"
 
 [[NNlib]]
 deps = ["BinaryProvider", "Libdl", "LinearAlgebra", "Requires", "Statistics"]
