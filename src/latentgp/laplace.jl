@@ -1,19 +1,22 @@
 
 function laplace_approximation(K::PDMats.PDMat,
-                               scale::Float64,
-                               initial_latent::Array{Float64, 2};
+                               choices::Array{<:Int, 2},
+                               initial_latent::Vector{<:Real},
+                               scale::Float64;
                                verbose::Bool=true)
-    # Variant of the Newton's method based mode-locating algorithm (GPML, Algorithm 3.1)
-    # Utilizes the Woodburry identity for avoiding two cholesky factorizations
-    # per Newton iteration.
-    # Reduces the stepsize whenever the marginal likelhood gets stuck
-    # Algortihm 3.1 utilizes the fact that W is diagonal which is not for our case.
-    # Note: ( K^{-1} + W )^{-1} = K ( I - ( I + W K )^{-1} ) W K
+#=
+    Variant of the Newton's method based mode-locating algorithm (GPML, Algorithm 3.1)
+    Utilizes the Woodburry identity for avoiding two cholesky factorizations
+    per Newton iteration.
+
+    Reduces the stepsize whenever the marginal likelhood gets stuck
+    Algortihm 3.1 utilizes the fact that W is diagonal which is not for our case.
+
+    Note: ( K^{-1} + W )^{-1} = K ( I - ( I + W K )^{-1} ) W K
+=##
     max_iter = 20
 
-    latent_shape = size(initial_latent)
-    f            = reshape(initial_latent, :)
-    latent       = initial_latent
+    f            = initial_latent
     prev_f       = deepcopy(f)
     prev_mll     = -Inf
 
@@ -22,9 +25,9 @@ function laplace_approximation(K::PDMats.PDMat,
     a   = nothing
     B   = nothing
     for iteration = 1:max_iter
-        logpref = logbtl_full(latent, scale)
-        ∇ll     = ∇logbtl(logpref, scale)
-        W       = -∇²logbtl(logpref, reshape(∇ll, size(logpref)), scale)
+        btl_mat = logbtl_matrix(choices, f, scale)
+        ∇ll     = ∇logbtl(btl_mat, f, choices, scale)
+        W       = -∇²logbtl(btl_mat, ∇ll, choices, scale)
 
         WK  = W*K
         b   = W*f + ∇ll
@@ -33,7 +36,7 @@ function laplace_approximation(K::PDMats.PDMat,
         a   = (b - Blu \ (WK*b))
 
         f   = α*(K*a) + (1 - α)*prev_f
-        mll = sum(logpref[:,1]) + dot(a, f)/-2 +  - logdet(Blu)/2
+        mll = sum(btl_mat[:,1]) + dot(a, f)/-2 + logdet(Blu)/-2
 
         ∇mll = norm(∇ll - a)
         Δf   = norm(prev_f - f)
@@ -52,7 +55,6 @@ function laplace_approximation(K::PDMats.PDMat,
 
         prev_f   = deepcopy(f)
         prev_mll = mll
-        latent   = reshape(f, latent_shape)
     end
     μ  = f
     Σ  = K * (I - (I + WK) \ WK)

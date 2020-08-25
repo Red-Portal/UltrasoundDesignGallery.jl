@@ -1,74 +1,42 @@
 
-function laplace_approximation_partial(K::Matrix,
-                                       scale::Float64,
-                                       initial_latent::Array{Float64, 2};
-                                       verbose::Bool=true)
-    # Variant of the Newton's method based mode-locating algorithm (GPML, Algorithm 3.1)
-    # Utilizes the Woodburry identity for avoiding two cholesky factorizations
-    # per Newton iteration.
-    # Reduces the stepsize whenever the marginal likelhood gets stuck
-    # Algortihm 3.1 utilizes the fact that W is diagonal which is not for our case.
-    # Note: ( K^{-1} + W )^{-1} = K ( I - ( I + W K )^{-1} ) W K
-    max_iter = 20
-
-    latent_shape = size(initial_latent)
-    f            = reshape(initial_latent, :)
-    latent       = initial_latent
-    prev_f       = deepcopy(f)
-    prev_mll     = -Inf
-
-    WK = nothing
-    W  = nothing
-    α  = 1.0
-    a  = nothing
-    for iteration = 1:max_iter
-        logpref = logbtl_full(latent, scale)
-        ∇ll     = ∇logbtl(logpref, scale)
-        W       = -∇²logbtl(logpref, reshape(∇ll, size(logpref)), scale)
-
-        WK  = W*K.mat
-        b   = W*f + ∇ll
-        B   = I + WK
-        Blu = lu(B)
-        a   = (b - Blu \ (WK*b))
-
-        f   = α*K.mat*a + (1 - α)*prev_f
-        mll = sum(logpref[:,1]) + dot(a, f)/-2 +  - logdet(Blu)/2
-
-        ∇mll = norm(∇ll - K\f)
-        Δf   = norm(prev_f - f)
-
-        if(∇mll < 1e-4 || Δf < 1e-4)
-            break
+function map_laplace(data::Matrix{<:Real},
+                     choices::Matrix{<:Int},
+                     initial_θ::Vector{<:Real},
+                     scale::Real,
+                     θ_prior;
+                     verbose::Bool=true)
+    μ = nothing
+    Σ = nothing
+    a = nothing
+    B = nothing
+    K = nothing
+    function f(x)
+        θ = exp.(x)
+        K = compute_gram_matrix(data, θ[1], θ[2], θ[3])   
+        try
+            K          = PDMats.PDMat(K)
+            μ, Σ, a, B = laplace_approximation(K, choices, zeros(size(data, 2)), scale, verbose=false)
+            loglike    = logbtl(choices, μ, scale)
+            mll        = loglike + dot(a, μ)/-2 + logdet(B)/-2 + logpdf(θ_prior, x)
+            return mll
+        catch err
+            if(isa(err, LinearAlgebra.PosDefException))
+                @warn "Cholesky failed. Rejecting proposal"
+                return -Inf
+            else
+                throw(err)
+            end
         end
-
-        if(mll <= prev_mll)
-            α /= 2
-        end
-
-        if(verbose)
-            @info "Laplace approximation stat" iteration ∇mll Δf
-        end
-
-        prev_f   = deepcopy(f)
-        prev_mll = mll
-        latent   = reshape(f, latent_shape)
     end
-    μ  = f
-    Σ  = K * (I - (I + WK) \ WK)
-    # Due to numerical inaccuracies,
-    # Σ often is not symmetric out of the box
-    Σu = UpperTriangular(Σ)
-    Σd = Diagonal(Σ)
-    Σ  = Σu + Σu' - Σd
-    return f, a, Σ
-end
 
-function map_laplace(data, initial_latent, scale)
-    function cost()
-        K, Kinv = compute_gram_matrix(data, ℓ², σ², ϵ²)   
-        f, a    = laplace_approximation_partial(
-            K, scale, initial_latent; verbose=true)
-        
+    opt_res = Optim.maximize(f, log.(initial_θ),
+                             Optim.BFGS(linesearch=LineSearches.BackTracking()),
+                             Optim.Options(g_tol = 1e-4,
+                                           x_tol = 1e-4,
+                                           iterations=100))
+    if(verbose)
+        @info(opt_res)
     end
+    θ_opt = Optim.maximizer(opt_res)
+    exp.(θ_opt), μ, Σ, a, B, K
 end

@@ -1,19 +1,19 @@
 
-function pseudo_marginal_full(prng, data, scale, ℓ², σ², ϵ², u)
-"""
+function pseudo_marginal_full(prng, data, choices, scale, ℓ², σ², ϵ², u)
+#=
     Filippone, Maurizio, and Mark Girolami. 
     "Pseudo-marginal Bayesian inference for Gaussian processes." 
     IEEE Transactions on Pattern Analysis and Machine Intelligence (2014)
-"""
-    f_shape  = size(data)[2:3]
+=##
     try 
         K          = compute_gram_matrix(data, ℓ², σ², ϵ²)
         K          = PDMats.PDMat(K)
-        μ, Σ, a, B = laplace_approximation(K, scale, zeros(f_shape); verbose=false)
+        μ, Σ, a, B = laplace_approximation(K, choices, zeros(length(u)), scale;
+                                           verbose=false)
         Σ          = PDMats.PDMat(Σ)
         q          = MvNormal(μ, Σ)
         f_sample   = PDMats.unwhiten(q.Σ, u) + q.μ
-        joint      = logjointlike(K, reshape(f_sample, f_shape), scale)
+        joint      = logjointlike(K, choices, f_sample, scale)
         logpml     = joint - logpdf(q, f_sample)
         return logpml, f_sample, q, K, Σ, a
     catch err
@@ -26,25 +26,24 @@ function pseudo_marginal_full(prng, data, scale, ℓ², σ², ϵ², u)
     end
 end
 
-@inline function pseudo_marginal_partial(prng, data, q, K, scale, u)
-"""
+@inline function pseudo_marginal_partial(prng, choices, q, K, scale, u)
+#=
     Filippone, Maurizio, and Mark Girolami. 
     "Pseudo-marginal Bayesian inference for Gaussian processes." 
     IEEE Transactions on Pattern Analysis and Machine Intelligence (2014)
-"""
-    f_shape  = size(data)[2:3]
+=##
     f_sample = PDMats.unwhiten(q.Σ, u) + q.μ
-    joint    = logjointlike(K, reshape(f_sample, f_shape), scale)
+    joint    = logjointlike(K, choices, f_sample, scale)
     logpml   = joint - logpdf(q, f_sample)
     logpml
 end
 
 function ess_transition(prng, loglike, prev_θ, prev_like, prior)
-"""
+#=
     Murray, Iain, Ryan Adams, and David MacKay. 
     "Elliptical slice sampling." 
     Artificial Intelligence and Statistics. 2010.
-"""
+=##
     @label propose
     chol_fail = 0
     ν     = rand(prng, prior)
@@ -87,12 +86,20 @@ function ess_transition(prng, loglike, prev_θ, prev_like, prior)
     end
 end
 
-function pm_ess(prng, samples, warmup, initial_θ, initial_f, prior, scale, data)
-"""
+function pm_ess(prng,
+                samples::Int,
+                warmup::Int,
+                initial_θ::Vector{<:Real},
+                initial_f::Vector{<:Real},
+                prior,
+                scale::Real,
+                data::Matrix{<:Real},
+                choices::Matrix{<:Int})
+#=
     Murray, Iain, and Matthew Graham. 
-    "Pseudo-marginal slice sampling." 
+    Pseudo-marginal slice sampling. 
     Artificial Intelligence and Statistics. 2016.
-"""
+=##
     θ_samples = zeros(length(initial_θ), samples) 
     f_samples = zeros(length(initial_f), samples)
     a_samples = zeros(length(initial_f), samples)
@@ -101,35 +108,40 @@ function pm_ess(prng, samples, warmup, initial_θ, initial_f, prior, scale, data
 
     u_prior = MvNormal(length(initial_f), 1.0)
 
-    θ = log.(initial_θ)
-    u = rand(prng, u_prior)
+    θ_map, f, Σ, a, B, K = map_laplace(data, choices, initial_θ, scale, prior;
+                                       verbose=true)
+    θ      = log.(θ_map)
+    u      = rand(prng, u_prior)
+    q      = MvNormal(f, Σ)
+    logpml = pseudo_marginal_partial(prng, choices, q, K, scale, u)
 
-    logpml, f, q, K, Σ, a = pseudo_marginal_full(
-        prng, data, scale, initial_θ[1], initial_θ[2], initial_θ[3], u)
-    if(isinf(logpml))
-        while true
-            θ = exp.(rand(prng, prior) )
-            logpml, f, q, K, Σ, a = pseudo_marginal_full(
-                prng, data, scale, θ[1], θ[2], θ[3], u)
-            if(!isinf(logpml))
-                break
-            end
-        end
-    end
+    # logpml, f, q, K, Σ, a = pseudo_marginal_full(
+    #     prng, data, scale, initial_θ[1], initial_θ[2], initial_θ[3], u)
+    # if(isinf(logpml))
+    #     while true
+    #         θ = exp.(rand(prng, prior) )
+    #         logpml, f, q, K, Σ, a = pseudo_marginal_full(
+    #             prng, data, scale, θ[1], θ[2], θ[3], u)
+    #         if(!isinf(logpml))
+    #             break
+    #         end
+    #     end
+    # end
 
     u_acc_mavg = OnlineStats.Mean()
     θ_acc_mavg = OnlineStats.Mean()
     prog       = ProgressMeter.Progress(samples+warmup)
     for i = 1:(samples+warmup)
         Lu = u_in->begin
-            pseudo_marginal_partial(prng, data, q, K, scale, u_in)
+            pseudo_marginal_partial(prng, choices, q, K, scale, u_in)
         end
         u, logpml, u_nprop = ess_transition(prng, Lu, u, logpml, u_prior)
 
         Lθ = θ_in->begin
             θ_lin = exp.(θ_in)
             logpml, f, q, K, Σ, a = pseudo_marginal_full(
-                prng, data, scale, θ_lin[1], θ_lin[2], θ_lin[3], u)
+                prng, data, choices, scale,
+                θ_lin[1], θ_lin[2], θ_lin[3], u)
             logpml
         end
         θ, logpml, θ_nprop = ess_transition(prng, Lθ, θ, logpml, prior)

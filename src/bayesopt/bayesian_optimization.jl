@@ -8,10 +8,12 @@ function expected_improvement(x::Vector,
     N  = length(K)
     ei = zeros(N)
     @simd for i = 1:N
-        μ, σ  = gp_predict(x, X, K[i], a[:,i], k[i])
-        Δy    = y_opt - μ
+        μ, σ² = gp_predict(x, X, K[i], a[:,i], k[i])
+        σ     = sqrt(σ²)
+        Δy    = μ - y_opt
         z     = Δy / σ
         ei[i] = Δy * normcdf(z) + σ*normpdf(z)
+        #ei[i] = σ
     end
     mean(ei)
 end
@@ -28,8 +30,6 @@ function optimize_acquisition(dim::Int64,
     # The below Optim API calling part is succeptible to API breaks.
     # Optim's constained optimization API is not stable right now.
     f(x, g)  = expected_improvement(x, y_opt, X, K, a, k)
-    println(f([0.5], []))
-
     opt = NLopt.Opt(:GN_DIRECT, dim)
     opt.lower_bounds  = zeros(dim)
     opt.upper_bounds  = ones(dim)
@@ -37,7 +37,10 @@ function optimize_acquisition(dim::Int64,
     #opt.xtol_abs      = 1e-5 
     opt.maxeval       = max_iter
     opt.max_objective = f
-    opt_y, opt_x, ret = NLopt.optimize(opt, rand(dim))
-    println(ret)
-    return opt_x, opt_y
+
+    res, time = @timed NLopt.optimize(opt, rand(dim))
+    optimum, solution, status = res
+
+    @info "Inner Optimization Stat" status time solution
+    return solution, optimum
 end
