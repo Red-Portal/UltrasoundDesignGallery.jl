@@ -1,20 +1,4 @@
 
-# @inline function safe_cholesky(K::Matrix)
-#     try
-#         PDMats.PDMat(K)
-#     catch
-#         Kmax = maximum(K)
-#         α    = eps(eltype(K))
-#         while !isposdef(K+α*I) && α < 0.01*Kmax
-#             α *= 2.0
-#         end
-#         if α >= 0.01*Kmax
-#             throw(ErrorException("Adding noise on the diagonal was not sufficient to build a positive-definite matrix:\n\t- Check that your kernel parameters are not extreme\n\t- Check that your data is sufficiently sparse\n\t- Maybe use a different kernel"))
-#         end
-#         PDMats.PDMat(K+α*I)
-#     end
-# end
-
 @inline function logbtl(choices::Array{<:Int, 2},
                         goodness::Array{<:Real},
                         scale::Real)
@@ -33,7 +17,7 @@ end
     scaled  = goodness_matrix / scale
     Z       = logsumexp(scaled, dims=2)[:,1]
     @simd for i = 1:size(scaled, 1)
-        scaled[i,:] = scaled[i,:] .- Z[i]
+        @inbounds scaled[i,:] = scaled[i,:] .- Z[i]
     end
     return scaled
 end
@@ -45,21 +29,23 @@ end
     pref         = exp.(logbtl_matrix)
     partial_grad = zeros(size(logbtl_matrix))
 
-    # first column derivative
-    pick  = pref[:,1]
-    ∇pick = (1 .- pick) / scale
-    partial_grad[:,1] = ∇pick
+    @inbounds begin
+        # first column derivative
+        pick  = pref[:,1]
+        ∇pick = (1 .- pick) / scale
+        partial_grad[:,1] = ∇pick
 
-    # other column derivative
-    comps  = pref[:,2:end]
-    ∇comp  = comps / -scale
-    partial_grad[:,2:end] = ∇comp
+        # other column derivative
+        comps  = pref[:,2:end]
+        ∇comp  = comps / -scale
+        partial_grad[:,2:end] = ∇comp
+    end
 
     partial_grad = reshape(partial_grad, :)
     choices      = reshape(choices, :)
     full_grad    = zeros(length(latent))
     @simd for i = 1:length(partial_grad)
-        full_grad[choices[i]] += partial_grad[i]
+        @inbounds full_grad[choices[i]] += partial_grad[i]
     end
     return full_grad
 end
