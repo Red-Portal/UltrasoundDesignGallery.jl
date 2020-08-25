@@ -78,18 +78,26 @@ function test_derivative()
     end
 end
 
+function rosenbrock(x::Vector{<:Real})
+    sum = 0.0
+    for i = 1:length(x)-1
+        sum += 100 * (x[i+1] - x[i]^2)^2 + (x[i] - 1)^2
+    end
+    return -sum
+end
+
 function test_bo()
     npoints  = 3
     ncand    = 2
     prng     = MersenneTwister(1)
     scale    = 1.0
-    dims     = 1
+    dims     = 4
 
     ℓ²  = 1.0
     σ²  = 1.0  
     ϵ²  = 1.0
 
-    f(x) = sin((x[1] .- 0.5)*4*π) + randn(prng) * 0.1
+    f(x) = rosenbrock(x) + randn(prng) * 1.0
     
     testpoints = rand(prng, dims, npoints * ncand)
     goodness   = hcat([f(testpoints[:,i]) for i = 1:npoints * ncand]...)
@@ -105,16 +113,16 @@ function test_bo()
     testpoints = reshape(testpoints, (dims, :))
     choices    = reshape(collect(1:npoints*ncand), npoints, ncand) 
 
-    priors = Product([Normal(2, 2),
-                      Normal(2, 2),
-                      Normal(2, 2)])
+    priors = Product([Normal(0, 1),
+                      Normal(0, 1),
+                      Normal(-2, 2)])
 
     initial_latent = zeros(length(goodness))
     θ_init  = [ℓ², σ², ϵ²]
     hist    = Float64[]
-    samples = 64
-    warmup  = 64
-    for i = 1:20
+    samples = 32
+    warmup  = 32
+    for i = 1:100
         opt_idx = argmax(goodness)
         x_opt   = testpoints[:,opt_idx]
         y_opt   = goodness[opt_idx]
@@ -125,7 +133,7 @@ function test_bo()
             priors, scale, testpoints, choices)
         ks = precompute_lgp(θs)
 
-        x_query, _ = optimize_acquisition(dims, 1024, y_opt, testpoints, Ks, as, ks)
+        x_query, _ = optimize_acquisition(dims, 10000, y_opt, testpoints, Ks, as, ks)
         y_query    = f(x_query)
 
         choices    = begin
@@ -142,7 +150,7 @@ function test_bo()
 
         display(plot(hist))
 
-        @info(iteration=i,
+        @info(iteration = i,
               x_query = x_query,
               y_query = y_query,
               y_optimal = y_opt)
