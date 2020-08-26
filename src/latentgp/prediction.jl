@@ -29,11 +29,11 @@ end
     μ, σ²
 end
 
-@inline function mgp_predict(x::Vector,
-                     X::Matrix,
-                     K::Array{PDMats.PDMat},
-                     a::Matrix,
-                     ks::Array{KernelFunctions.Kernel})
+@inline function gp_predict(x::Vector,
+                            X::Matrix,
+                            K::Array{PDMats.PDMat},
+                            a::Matrix,
+                            ks::Array{KernelFunctions.Kernel})
     N   = length(K)
     μs  = zeros(N)
     σ²s = zeros(N)
@@ -43,16 +43,16 @@ end
         μ        = dot(k_star, a[:,idx])
         σ²       = k(x, x) - PDMats.invquad(K[idx], k_star)
         μs[idx]  = μ
-        σ²s[idx] = σ²s
+        σ²s[idx] = σ²
     end
     mean(μs), mean(σ²s)
 end
 
-@inline function mgp_predict(x::Matrix,
-                     X::Matrix,
-                     K::Array{PDMats.PDMat},
-                     a::Matrix,
-                     ks::Array{KernelFunctions.Kernel})
+@inline function gp_predict(x::Matrix,
+                            X::Matrix,
+                            K::Array{PDMats.PDMat},
+                            a::Matrix,
+                            ks::Array{KernelFunctions.Kernel})
     N   = length(K)
     μs  = zeros(size(x, 2), N)
     σ²s = zeros(size(μs))

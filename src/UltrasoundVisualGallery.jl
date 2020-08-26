@@ -5,12 +5,21 @@ using LinearAlgebra
 using Random
 using StatsFuns
 
-import PDMats
-import OnlineStats
+import Gtk
+import GtkReactive
+import ImageFiltering
+import ImageTransformations
+import ImageView
+import Images
 import KernelFunctions
-import Optim
 import LineSearches
 import NLopt
+import OffsetArrays
+import OnlineStats
+import Optim
+import PDMats
+import ProgressMeter
+import REPL.TerminalMenus
 
 include("latentgp/likelihood.jl")
 include("latentgp/laplace.jl")
@@ -19,4 +28,8 @@ include("latentgp/mcmc.jl")
 include("latentgp/prediction.jl")
 include("latentgp/utils.jl")
 include("bayesopt/bayesian_optimization.jl")
+include("imageproc/diffusion.jl")
+include("imageproc/laplacian_pyramid.jl")
+include("ui/pairwise.jl")
+include("ui/linesearch.jl")
 
