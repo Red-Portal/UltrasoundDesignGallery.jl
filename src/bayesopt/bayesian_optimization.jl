@@ -57,7 +57,7 @@ function prefbo_linesearch(objective_linesearch,
         #bo_status_update!(status, "Finding current optimum")
         x_opt, y_opt = optimize_mean(dims, search_budget, data_x, K, a, k)
 
-        bo_status_update!(status, "Optimizing acquisition")
+        #bo_status_update!(status, "Optimizing acquisition")
         x_query, _   = optimize_acquisition(
             dims, search_budget, y_opt, data_x, K, a, k)
 

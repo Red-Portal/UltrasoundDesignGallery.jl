@@ -23,7 +23,7 @@ end
 end
 
 function main()
-    base_img = TestImages.testimage("lena_gray_256.tif")
+    base_img = TestImages.testimage("lena_gray_512.tif")
     base_img = Noise.mult_gauss(base_img)
     base_img = clamp.(base_img, 0, 1)
 

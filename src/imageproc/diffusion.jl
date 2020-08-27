@@ -8,25 +8,26 @@ function diffusion(image, λ::Real, K::Real, niters::Int)
     @assert 0 <= λ && λ <= 0.25
 
     @inline function g(norm∇I)
-        1/(1 + (norm∇I / K).^2)
+        coef = (norm∇I / K)
+        1/(1 + coef*coef)
     end
 
     @inline @inbounds function op(buf)
-        north  = buf[1,2]
-        south  = buf[3,2]
-        west   = buf[2,1]
-        east   = buf[2,3]
-        center = buf[2,2]
+        west   = Float32(buf[2,1])
+        north  = Float32(buf[1,2])
+        center = Float32(buf[2,2])
+        south  = Float32(buf[3,2])
+        east   = Float32(buf[2,3])
+
         ∇n = north - center
         ∇s = south - center
         ∇w = west  - center
         ∇e = east  - center
-
         Cn = g(abs(∇n))
         Cs = g(abs(∇s))
         Cw = g(abs(∇w))
         Ce = g(abs(∇e))
-        center + λ*(Cn * ∇n + Cs * ∇s + Ce * ∇e + Cw * ∇w)
+        Float64(center + λ*(Cn * ∇n + Cs * ∇s + Ce * ∇e + Cw * ∇w))
     end
 
     result     = image
