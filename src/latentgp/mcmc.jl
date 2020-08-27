@@ -115,19 +115,6 @@ function pm_ess(prng,
     q      = MvNormal(f, Σ)
     logpml = pseudo_marginal_partial(prng, choices, q, K, scale, u)
 
-    # logpml, f, q, K, Σ, a = pseudo_marginal_full(
-    #     prng, data, scale, initial_θ[1], initial_θ[2], initial_θ[3], u)
-    # if(isinf(logpml))
-    #     while true
-    #         θ = exp.(rand(prng, prior) )
-    #         logpml, f, q, K, Σ, a = pseudo_marginal_full(
-    #             prng, data, scale, θ[1], θ[2], θ[3], u)
-    #         if(!isinf(logpml))
-    #             break
-    #         end
-    #     end
-    # end
-
     u_acc_mavg = OnlineStats.Mean()
     θ_acc_mavg = OnlineStats.Mean()
     prog       = ProgressMeter.Progress(samples+warmup)

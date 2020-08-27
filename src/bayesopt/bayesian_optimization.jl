@@ -1,97 +1,32 @@
 
-function expected_improvement(x::Vector,
-                              y_opt::Real,
-                              X::Matrix,
-                              K::Array{PDMats.PDMat},
-                              a::Matrix,
-                              k::Array{KernelFunctions.Kernel})
-    N  = length(K)
-    ei = zeros(N)
-    @simd for i = 1:N
-        μ, σ² = gp_predict(x, X, K[i], a[:,i], k[i])
-        σ     = sqrt(σ²)
-        Δy    = μ - y_opt
-        z     = Δy / σ
-        ei[i] = Δy * normcdf(z) + σ*normpdf(z)
-    end
-    mean(ei)
-end
-
-function expected_improvement(x::Vector,
-                              y_opt::Real,
-                              X::Matrix,
-                              K::PDMats.PDMat,
-                              a::Vector,
-                              k::KernelFunctions.Kernel)
-    μ, σ² = gp_predict(x, X, K, a, k)
-    σ     = sqrt(σ²)
-    Δy    = μ - y_opt
-    z     = Δy / σ
-    ei    = Δy * normcdf(z) + σ*normpdf(z)
-    ei
-end
-
-function optimize_acquisition(dim::Int64, max_iter::Int64, y_opt::Real, X::Matrix,
-                              K, a, k; verbose::Bool=true)
-    # The below Optim API calling part is succeptible to API breaks.
-    # Optim's constained optimization API is not stable right now.
-    f(x, g)  = expected_improvement(x, y_opt, X, K, a, k)
-
-    opt = NLopt.Opt(:GN_DIRECT, dim)
-    opt.lower_bounds  = zeros(dim)
-    opt.upper_bounds  = ones(dim)
-    #opt.ftol_abs      = 1e-5 
-    #opt.xtol_abs      = 1e-5 
-    opt.maxeval       = max_iter
-    opt.max_objective = f
-
-    res, time = @timed NLopt.optimize(opt, rand(dim))
-    optimum, solution, status = res
-    solution = clamp.(solution, 0, 1)
-    if(verbose)
-        @info "Inner Optimization Stat" status time solution
-    end
-    return solution, optimum
-end
-
-function optimize_mean(dim::Int64, max_iter::Int64, X::Matrix,
-                       K, a, k; verbose::Bool=true)
-    # The below Optim API calling part is succeptible to API breaks.
-    # Optim's constained optimization API is not stable right now.
-    f(x, g)  = gp_predict(x, X, K, a, k)[1]
-
-    opt = NLopt.Opt(:GN_DIRECT, dim)
-    opt.lower_bounds  = zeros(dim)
-    opt.upper_bounds  = ones(dim)
-    opt.maxeval       = max_iter
-    opt.max_objective = f
-
-    res, time = @timed NLopt.optimize(opt, rand(dim))
-    optimum, solution, status = res
-    solution = clamp.(solution, 0, 1)
-    if(verbose)
-        @info "Optima Finding Stat" status time solution
-    end
-    return solution, optimum
-end
-
-
-function pairwise_prefbo(objective, dims, warmup_steps)
-    img      = TestImages.testimage("lena_gray_256.tif")
-    prng     = MersenneTwister(1)
-    scale    = 1.0
-
+function prefbo_linesearch(objective_linesearch,
+                           iters::Int,
+                           dims::Int,
+                           scale::Real,
+                           marginalize::Bool;
+                           prng=MersenneTwister(),
+                           warmup_samples::Int=4,
+                           search_budget::Int=4000,
+                           mcmc_burnin::Int=32,
+                           mcmc_samples::Int=32)
+    warmup_steps = 4
     ℓ² = 1.0
     σ² = 1.0  
     ϵ² = 1.0
 
-    data_x = rand(prng, dims, warmup_steps*2)
-    data_c = zeros(Int64, warmup_steps, 2)
-    for i = 1:2:warmup_steps*2
-        choice  = objective(data_x[:,i], data_x[:,i+1])
-        i_nduel = ceil(Int64, i / 2)
-        data_c[i_nduel, 1] = choice == 1 ? i   : i+1
-        data_c[i_nduel, 2] = choice == 1 ? i+1 : i
+    data_x = zeros(dims, 0)
+    data_c = zeros(Int64, warmup_steps, 3)
+    for i = 1:3:warmup_samples*3
+        x1 = rand(prng, dims)
+        x2 = rand(prng, dims)
+        c1, c2, c3 = objective_linesearch(x1, x2)
+        i_nduel = ceil(Int64, i / 3)
+        data_c[i_nduel, 1] = i
+        data_c[i_nduel, 2] = i+1
+        data_c[i_nduel, 3] = i+2
+        data_x = hcat(data_x, reshape(c1, (:,1)))
+        data_x = hcat(data_x, reshape(c2, (:,1)))
+        data_x = hcat(data_x, reshape(c3, (:,1)))
     end
     
     priors = Product([Normal(0, 1),
@@ -100,47 +35,66 @@ function pairwise_prefbo(objective, dims, warmup_steps)
 
     initial_latent = zeros(size(data_x, 2))
     θ_init  = [ℓ², σ², ϵ²]
-    samples = 64
-    warmup  = 64
 
-    θs, fs, as, Ks = pm_ess(
-        prng, samples, warmup, θ_init, initial_latent,
-        priors, scale, data_x, data_c)
-    ks    = precompute_lgp(θs)
-    for i = 1:10
-        x_opt, y_opt = optimize_mean(dims, 10000, data_x, Ks, as, ks)
-        x_query, _   = optimize_acquisition(dims, 10000, y_opt, data_x, Ks, as, ks)
-
-        choice  = objective(x_opt, x_query)
-
-        data_x = hcat(data_x, reshape(x_opt,   (:,1)))
-        data_x = hcat(data_x, reshape(x_query, (:,1)))
-        choice  = begin
-            if(choice == 1)
-                [size(data_x, 2) - 1, size(data_x, 2)]
-            else
-                [size(data_x, 2), size(data_x, 2) - 1]
-            end
+    θ, f, a, K, k = begin
+        if(marginalize)
+            θ, f, a, K = pm_ess(
+                prng, mcmc_samples, mcmc_burnin, θ_init,
+                initial_latent, priors, scale, data_x, data_c)
+            k = precompute_lgp(θ)
+            θ, f, a, K, k
+        else
+            θ, f, _, a, _, K = map_laplace(
+                data_x, data_c, θ_init, scale, priors;
+                verbose=true)
+            k = construct_kernel(θ...)
+            θ, f, a, K, k
         end
-        data_c = vcat(data_c, reshape(choice, 1, :))
+    end
+    
+    #status = bo_status_window!()
+    for i = 1:10
+        #bo_status_update!(status, "Finding current optimum")
+        x_opt, y_opt = optimize_mean(dims, search_budget, data_x, K, a, k)
+
+        bo_status_update!(status, "Optimizing acquisition")
+        x_query, _   = optimize_acquisition(
+            dims, search_budget, y_opt, data_x, K, a, k)
+
+        #bo_status_destroy!(status)
+        x1, x2, x3 = objective_linesearch(x_opt, x_query)
+        #status = bo_status_window!()
+
+        data_x = hcat(data_x, reshape(x1, (:,1)))
+        data_x = hcat(data_x, reshape(x2, (:,1)))
+        data_x = hcat(data_x, reshape(x3, (:,1)))
+
+        choices = size(data_c, 1) .+ [1,2,3]
+        data_c  = vcat(data_c, reshape(choices, (:,3)))
 
         @info("BO iteration stat",
               iteration = i,
               x_query   = x_query,
-              x_optimum = x_opt)
-
-        θ_init         = mean(θs, dims=2)[:,1]
+              x_optimum = x_opt,
+              x_selected = x1)
         initial_latent = zeros(size(data_x, 2))
-        θs, fs, as, Ks = pm_ess(
-            prng, samples, warmup, θ_init, initial_latent,
-            priors, scale, data_x, data_c)
-        ks    = precompute_lgp(θs)
+        #bo_status_update!(status, "Infering preference model")
+        θ, f, a, K, k = begin
+            if(marginalize)
+                θ, f, a, K = pm_ess(
+                    prng, mcmc_samples, mcmc_burnin, θ_init,
+                    initial_latent, priors, scale, data_x, data_c)
+                k = precompute_lgp(θ)
+                θ, f, a, K, k
+            else
+                θ, f, _, a, _, K = map_laplace(
+                    data_x, data_c, θ_init, scale, priors;
+                    verbose=true)
+                k = construct_kernel(θ...)
+                θ, f, a, K, k
+            end
+        end
     end
-    x_opt, y_opt = optimize_mean(dims, 30000, data_x, Ks, as, ks)
+    x_opt, y_opt = optimize_mean(dims, 30000, data_x, K, a, k)
     x_opt
 end
-
-function lerp(x::Real, low::Real, high::Real)
-    return x * (high - low) + low;
-end
-

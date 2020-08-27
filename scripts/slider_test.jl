@@ -29,8 +29,6 @@ redraw = GtkReactive.draw(c, sldrsig) do cnvs, γ
     img = Images.adjust_histogram(image, Images.GammaCorrection(;gamma=γ))
     copy!(cnvs, img)
 
-    println("what fuck")
-
     # Here we set the coordinates of the canvas to correspond
     # to the selected region of the image. This ensures that
     # every point on the canvas has coordinates that correspond
@@ -38,4 +36,15 @@ redraw = GtkReactive.draw(c, sldrsig) do cnvs, γ
     #set_coordinates(cnvs, r)
 end
 
+block = Gtk.Condition()
+Gtk.signal_connect(butn.widget, :clicked) do widget
+    Gtk.notify(block)
+end
+
+
+    println("start wait")
+
 Gtk.showall(win);
+Gtk.wait(block)
+
+    println("finish wait")
