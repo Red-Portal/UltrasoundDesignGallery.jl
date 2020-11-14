@@ -1,2 +1,4 @@
-This is an awesome new scientific project that uses `DrWatson`!
+# Ultrasound Design Gallery
 
+# License
+See `LICENSE` file.
