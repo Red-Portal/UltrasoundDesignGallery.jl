@@ -1,5 +1,5 @@
 
-include("../src/UltrasoundVisualGallery.jl")
+include("../src/UltrasoundDesignGallery.jl")
 
 image = TestImages.testimage("lighthouse");
 c     = GtkReactive.canvas(GtkReactive.UserUnit, size(image)...);

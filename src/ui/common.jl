@@ -19,7 +19,7 @@ function create_window(name::String, canvassize::Tuple{Int,Int})
 
     grid = Gtk.Grid()
     Gtk.set_gtk_property!(grid, :column_homogeneous, true)
-    sldr = GtkReactive.slider(0.0:0.01:1.0)
+    sldr = GtkReactive.slider(0.0:0.02:1.0)
     butn = GtkReactive.button("done")
     grid[1:3,1] = sldr
     grid[4  ,1] = butn

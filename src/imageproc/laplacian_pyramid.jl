@@ -7,13 +7,13 @@ Returns a laplacian pyramid
 =##
 
 function laplacian_pyramid(gaussian_pyramid::Array, upsample::Real)
-    laplacian_pyramid = typeof(gaussian_pyramid[1])[]
-    for i = 1:length(gaussian_pyramid)-1
-        x      = gaussian_pyramid[i]  
-        x_next = gaussian_pyramid[i+1]  
+    laplacian_pyramid = copy(gaussian_pyramid)
+    for i = 1:length(laplacian_pyramid)-1
+        x      = laplacian_pyramid[i]  
+        x_next = laplacian_pyramid[i+1]  
         x_next = ImageTransformations.imresize(x_next, ratio=upsample)
         Δimg   = x - x_next
-        push!(laplacian_pyramid, Δimg)
+        laplacian_pyramid[i] = Δimg
     end
     laplacian_pyramid
 end
@@ -21,8 +21,8 @@ end
 function synthesize_pyramid(pyramid::Array, upsample::Real)
     result = pyramid[end]
     for i = (length(pyramid)-1):-1:1
-        x      = pyramid[i]
-        result = ImageTransformations.imresize(result, ratio=upsample)
+        x       = pyramid[i]
+        result  = ImageTransformations.imresize(result, ratio=upsample)
         result += x
     end
     result

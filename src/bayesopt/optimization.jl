@@ -40,7 +40,7 @@
 # end
 
 function optimize_acquisition(dim::Int64, max_feval::Int64, y_opt::Real, X::Matrix,
-                              K, a, k; verbose::Bool=true)
+                              K, a, k; x_hints=nothing, verbose::Bool=true)
     f(x)  = expected_improvement(x, y_opt, X, K, a, k)
 
     res = BlackBoxOptim.bboptimize(
@@ -48,10 +48,11 @@ function optimize_acquisition(dim::Int64, max_feval::Int64, y_opt::Real, X::Matr
         FitnessScheme=BlackBoxOptim.MaximizingFitnessScheme,
         SearchRange=(0.0, 1.0),
         NumDimensions=dim,
-        Method=:xnes,
+        Method=:dxnes,
         MaxFuncEvals=max_feval,
         NThreads=Threads.nthreads()-1,
         lambda=32,
+        ini_x=x_hints,
         TraceMode= verbose ? :verbose : :compact)
     
     solution = BlackBoxOptim.best_candidate(res)
@@ -61,7 +62,7 @@ function optimize_acquisition(dim::Int64, max_feval::Int64, y_opt::Real, X::Matr
 end
 
 function optimize_mean(dim::Int64, max_feval::Int64, X::Matrix,
-                       K, a, k; verbose::Bool=true)
+                       K, a, k; x_hints=nothing, verbose::Bool=true)
     f(x)  = gp_predict(x, X, K, a, k)[1]
 
     res = BlackBoxOptim.bboptimize(
@@ -69,10 +70,11 @@ function optimize_mean(dim::Int64, max_feval::Int64, X::Matrix,
         FitnessScheme=BlackBoxOptim.MaximizingFitnessScheme,
         SearchRange=(0.0, 1.0),
         NumDimensions=dim,
-        Method=:xnes,
+        Method=:dxnes,
         MaxFuncEvals=max_feval,
         NThreads=Threads.nthreads()-1,
         lambda=32,
+        ini_x=x_hints,
         TraceMode= verbose ? :verbose : :compact)
     
     solution = BlackBoxOptim.best_candidate(res)
