@@ -23,10 +23,8 @@ factor = 2
 device = CUDA.CuDevice(0)
 #device = :cpu
 
-println(typeof(img))
-    pyr    = Images.gaussian_pyramid(img, 4, factor, Float32(16.0))
-println(typeof(pyr[1]))
-    pyr    = laplacian_pyramid(pyr, factor)
+pyr    = Images.gaussian_pyramid(img, 4, factor, Float32(16.0))
+pyr    = laplacian_pyramid(pyr, factor)
 
 pyr[1] = srad(pyr[1], 0.3, 0.2, 16; device=device)
 pyr[2] = srad(pyr[2], 1.0, 0.1, 32; device=device)
