@@ -6,7 +6,7 @@ pyramid = laplacian_pyramid(img, n_scales, downsample, sigma)
 Returns a laplacian pyramid
 =##
 
-function laplacian_pyramid(gaussian_pyramid::Array, upsample::Real)
+function laplacian_pyramid(gaussian_pyramid::AbstractArray, upsample::Real)
     laplacian_pyramid = copy(gaussian_pyramid)
     for i = 1:length(laplacian_pyramid)-1
         x      = laplacian_pyramid[i]  
@@ -18,7 +18,7 @@ function laplacian_pyramid(gaussian_pyramid::Array, upsample::Real)
     laplacian_pyramid
 end
 
-function synthesize_pyramid(pyramid::Array, upsample::Real)
+function synthesize_pyramid(pyramid::AbstractArray, upsample::Real)
     result = pyramid[end]
     for i = (length(pyramid)-1):-1:1
         x       = pyramid[i]
