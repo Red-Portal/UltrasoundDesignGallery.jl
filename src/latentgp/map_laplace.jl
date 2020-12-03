@@ -29,7 +29,7 @@ function map_laplace(data::Matrix{<:Real},
         end
     end
 
-    opt_res = Optim.maximize(f, log.(initial_θ),
+    opt_res = Optim.maximize(f, initial_θ,
                              Optim.BFGS(linesearch=LineSearches.BackTracking()),
                              Optim.Options(g_tol = 1e-4,
                                            x_tol = 1e-4,

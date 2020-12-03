@@ -1,84 +1,42 @@
 
-# function optimize_acquisition(dim::Int64, max_iter::Int64, y_opt::Real, X::Matrix,
-#                               K, a, k; verbose::Bool=true)
-#     f(x, g)  = expected_improvement(x, y_opt, X, K, a, k)
+function optimize_acquisition(dim::Int64,
+                              max_feval::Int64,
+                              x_hint::AbstractVector,
+                              y_opt::Real,
+                              X::Matrix,
+                              K, a, k;
+                              verbose::Bool=true,
+                              prng=Random.GLOBAL_RNG)
+    α(x) = -expected_improvement(x, y_opt, X, K, a, k)
+    dims = length(x_hint)
 
-#     opt = NLopt.Opt(:GN_DIRECT, dim)
-#     opt.lower_bounds  = zeros(dim)
-#     opt.upper_bounds  = ones(dim)
-#     #opt.ftol_abs      = 1e-5 
-#     #opt.xtol_abs      = 1e-5 
-#     opt.maxeval       = max_iter
-#     opt.max_objective = f
+    res = CMAEvolutionStrategy.minimize(
+        α,
+        x_hint,
+        0.5*√(dim);
+        lower=ones(dim),
+        upper=zeros(dim),
+        seed=prng.seed[1],
+        xtol=1e-4,
+        ftol=1e-5,
+        maxfevals=max_feval,
+        multi_threading=true,
+        verbosity=verbose ? 3 : 0
+    )
 
-#     res, time = @timed NLopt.optimize(opt, rand(dim))
-#     optimum, solution, status = res
-#     solution = clamp.(solution, 0, 1)
-#     if(verbose)
-#         @info "Inner Optimization Stat" status time solution
-#     end
-#     return solution, optimum
-# end
-
-# function optimize_mean(dim::Int64, max_iter::Int64, X::Matrix,
-#                        K, a, k; verbose::Bool=true)
-#     f(x, g)  = gp_predict(x, X, K, a, k)[1]
-
-#     opt = NLopt.Opt(:GN_DIRECT, dim)
-#     opt.lower_bounds  = zeros(dim)
-#     opt.upper_bounds  = ones(dim)
-#     opt.maxeval       = max_iter
-#     opt.max_objective = f
-
-#     res, time = @timed NLopt.optimize(opt, rand(dim))
-#     optimum, solution, status = res
-#     solution = clamp.(solution, 0, 1)
-#     if(verbose)
-#         @info "Optima Finding Stat" status time solution
-#     end
-#     return solution, optimum
-# end
-
-function optimize_acquisition(dim::Int64, max_feval::Int64, y_opt::Real, X::Matrix,
-                              K, a, k; x_hints=nothing, verbose::Bool=true)
-    f(x)  = expected_improvement(x, y_opt, X, K, a, k)
-
-    res = BlackBoxOptim.bboptimize(
-        f;
-        FitnessScheme=BlackBoxOptim.MaximizingFitnessScheme,
-        SearchRange=(0.0, 1.0),
-        NumDimensions=dim,
-        Method=:dxnes,
-        MaxFuncEvals=max_feval,
-        NThreads=Threads.nthreads()-1,
-        lambda=32,
-        ini_x=x_hints,
-        TraceMode= verbose ? :verbose : :compact)
-    
-    solution = BlackBoxOptim.best_candidate(res)
-    optimum  = BlackBoxOptim.best_fitness(res)
-    solution = clamp.(solution, 0, 1)
-    return solution, optimum
+    x_sol = CMAEvolutionStrategy.xbest(res)
+    y_sol = α(x_sol)
+    x_sol = clamp.(x_sol, 0, 1)
+    return x_sol, y_sol
 end
 
-function optimize_mean(dim::Int64, max_feval::Int64, X::Matrix,
-                       K, a, k; x_hints=nothing, verbose::Bool=true)
-    f(x)  = gp_predict(x, X, K, a, k)[1]
-
-    res = BlackBoxOptim.bboptimize(
-        f;
-        FitnessScheme=BlackBoxOptim.MaximizingFitnessScheme,
-        SearchRange=(0.0, 1.0),
-        NumDimensions=dim,
-        Method=:dxnes,
-        MaxFuncEvals=max_feval,
-        NThreads=Threads.nthreads()-1,
-        lambda=32,
-        ini_x=x_hints,
-        TraceMode= verbose ? :verbose : :compact)
-    
-    solution = BlackBoxOptim.best_candidate(res)
-    optimum  = BlackBoxOptim.best_fitness(res)
-    solution = clamp.(solution, 0, 1)
-    return solution, optimum
+function optimize_mean(dim::Int64,
+                       max_feval::Int64,
+                       X::Matrix,
+                       K, a, k)
+    data_μs = [ gp_predict(X[:,i], X, K, a, k) for i = 1:size(X,2) ]
+    opt_idx    = argmax(data_μs)
+    x_opt      = X[:,opt_idx]
+    y_opt      = data_μs[opt_idx]
+    x_opt, y_opt, opt_idx
 end

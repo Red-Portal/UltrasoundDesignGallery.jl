@@ -7,12 +7,18 @@ using LinearAlgebra
 using Random
 using StatsFuns
 
-import CUDA
 import Base.Threads
-import BlackBoxOptim
+import CMAEvolutionStrategy
+import CUDA
+import Colors
+import DSP
+import FileIO
 import Gtk
+import Gtk.GConstants
+import Gtk.ShortNames
 import Reactive
 import GtkReactive
+import ImageCore
 import ImageFiltering
 import ImageTransformations
 import ImageView
@@ -37,9 +43,14 @@ include("bayesopt/bayesian_optimization.jl")
 include("bayesopt/optimization.jl")
 include("bayesopt/acquisition.jl")
 include("imageproc/diffusion.jl")
+include("imageproc/filter.jl")
 include("imageproc/laplacian_pyramid.jl")
 include("ui/pairwise.jl")
 include("ui/linesearch.jl")
-include("ui/common.jl")
+include("ui/menu.jl")
+include("ui/ui.jl")
+include("ui/window.jl")
+#include("ui/common.jl")
+include("simulation/ultrasound.jl")
 
 #end

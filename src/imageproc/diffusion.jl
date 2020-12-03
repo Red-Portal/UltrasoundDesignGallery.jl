@@ -108,7 +108,7 @@ function srad_kernel_cpu!(image, output, C, M, N, t, Δt::Real, ρ::Real)
 end
 
 function srad_gpu_phase1!(image, C, M, N, q0², q0const)
-    ϵ = eps(Float32)
+    ϵ = 1e-7
     i = (CUDA.blockIdx().x-1) * CUDA.blockDim().x + CUDA.threadIdx().x
     j = (CUDA.blockIdx().y-1) * CUDA.blockDim().y + CUDA.threadIdx().y
 
@@ -174,21 +174,20 @@ function srad(image::AbstractArray{Float32},
     "Speckle reducing anisotropic diffusion." 
     IEEE Transactions on Image Processing (TIP), 2002.
 =##
-    @assert ρ < 1.0
+    @assert ρ <= 1.0
     M      = size(image, 1)
     N      = size(image, 2)
 
-    image  = convert(Array{Float32}, image)
-     
-    output = Array{Float32}(undef, M, N)
-
-    # Diffusion coefficient buffer
-    C      = Array{Float32}(undef, M, N)
-
     if((device isa CUDA.CuDevice) && CUDA.functional())
-        image_dev  = CUDA.CuArray(image)
-        output_dev = CUDA.CuArray(output)
-        C_dev      = CUDA.CuArray(C)
+        image  = begin
+            if(image isa CUDA.CuArray)
+                image
+            else
+                CUDA.CuArray(image)
+            end
+        end
+        output = CUDA.CuArray{Float32}(undef, M, N)
+        C_dev  = CUDA.CuArray{Float32}(undef, M, N)
 
         thread_x = 8
         thread_y = 8
@@ -206,14 +205,16 @@ function srad(image::AbstractArray{Float32},
                 q0²     = exp(-ρ*(t-1)*Δt*2)
                 q0const = q0² * (1 + q0²) + eps(Float32)
                 CUDA.@cuda(threads=threads, blocks=blocks,
-                           srad_gpu_phase1!(image_dev, C_dev, M, N, q0², q0const))
+                           srad_gpu_phase1!(image, C_dev, M, N, q0², q0const))
                 CUDA.@cuda(threads=threads, blocks=blocks,
-                           srad_gpu_phase2!(image_dev, output_dev, C_dev, M, N, CΔt))
-                @swap!(image_dev, output_dev)
+                           srad_gpu_phase2!(image, output, C_dev, M, N, CΔt))
+                @swap!(image, output)
             end
         end
-        return Array{Float32}(output_dev)
+        return output
     else
+        C      = Array{Float32}(undef, M, N)
+        output = Array{Float32}(undef, M, N)
         for t = 1:niters
             srad_kernel_cpu!(image, output, C, M, N, Δt*(t-1), Δt, ρ)
             @swap!(image, output)
