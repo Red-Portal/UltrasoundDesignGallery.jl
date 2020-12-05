@@ -113,8 +113,7 @@ function pm_ess(prng,
 
     θ_map, f, Σ, a, B, K = map_laplace(data, choices, initial_θ, scale, prior;
                                        verbose=true)
-
-    θ      = log.(initial_θ)
+    θ      = θ_map
     u      = rand(prng, u_prior)
     q      = MvNormal(f, Σ)
     logpml = pseudo_marginal_partial(prng, choices, q, K, scale, u)
@@ -129,16 +128,15 @@ function pm_ess(prng,
         u, logpml, u_nprop = ess_transition(prng, Lu, u, logpml, u_prior)
 
         Lθ = θ_in->begin
-            θ_lin = exp.(θ_in)
             logpml, f, q, K, Σ, a = pseudo_marginal_full(
                 prng, data, choices, scale,
-                θ_lin[1], θ_lin[2], θ_lin[3:end], u)
+                θ_in[1], θ_in[2], θ_in[3:end], u)
             logpml
         end
         θ, logpml, θ_nprop = ess_transition(prng, Lθ, θ, logpml, prior)
 
         if(i > warmup)
-            θ_samples[:,i-warmup] = exp.(θ)
+            θ_samples[:,i-warmup] = θ
             f_samples[:,i-warmup] = f
             a_samples[:,i-warmup] = a
             K_samples[i-warmup]   = K

@@ -117,23 +117,6 @@ function opt_loop!(prng, image, dims, widgets, signals, transform_op, settings)
         @info("waiting")
         push!(widgets[:slider], 0.5)
 
-
-        signals[:file_export_der] = map(signals[:file_export_best]) do sig
-            if(sig)
-                fname = Gtk.open_dialog(
-                    "Load an image or video",
-                    Gtk.GtkNullContainer(),
-                    ("*.png",
-                     "*.jpg",
-                     Gtk.GtkFileFilter("*.png, *.jpg",
-                                       name="All supported formats")))
-                if(fname[end-3:end] == "png")
-                    idx = GtkReactive.value(widgets[:player])
-                    FileIO.save(image[:,:,idx], fname)
-                end
-            end
-        end
-
         render_loop!(x1, x2, image, widgets, signals, transform_op)
         r = GtkReactive.value(widgets[:slider])
         append_choice!(r, x1, x1_idx, x2, state)
@@ -184,9 +167,9 @@ function create_ui(prng, dims, transform_op)
     end
 
     settings = Dict{Symbol, Any}()
-    settings[:n_initial]   = 4
+    settings[:n_initial]        = 4
     settings[:marginalize]      = true
-    settings[:search_budget]    = 512
+    settings[:search_budget]    = 30.0
     settings[:n_mcmc_samples]   = 2000
     settings[:n_mcmc_burnin]    = 1000
     settings[:n_mcmc_thin]      = 20

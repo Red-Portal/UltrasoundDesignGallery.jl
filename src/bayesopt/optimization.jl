@@ -1,6 +1,7 @@
 
 function optimize_acquisition(dim::Int64,
-                              max_feval::Int64,
+                              #max_feval::Int64,
+                              max_time::Float64,
                               x_hint::AbstractVector,
                               y_opt::Real,
                               X::Matrix,
@@ -19,7 +20,8 @@ function optimize_acquisition(dim::Int64,
         seed=prng.seed[1],
         xtol=1e-4,
         ftol=1e-5,
-        maxfevals=max_feval,
+        #maxfevals=max_feval,
+        maxtime=max_time,
         multi_threading=true,
         verbosity=verbose ? 3 : 0
     )
@@ -31,7 +33,7 @@ function optimize_acquisition(dim::Int64,
 end
 
 function optimize_mean(dim::Int64,
-                       max_feval::Int64,
+                       max_feval::Real,
                        X::Matrix,
                        K, a, k)
     data_μs = [ gp_predict(X[:,i], X, K, a, k)[1] for i = 1:size(X,2) ]

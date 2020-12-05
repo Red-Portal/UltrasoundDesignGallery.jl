@@ -34,25 +34,27 @@ device = CUDA.CuDevice(0)
 pyr    = Images.gaussian_pyramid(img, 4, factor, Float32(16.0))
 pyr    = laplacian_pyramid(pyr, factor)
 
-niter  = 32
+niter  = 8
+Δt     = 0.7
+ρ      = 0.001
 σ      = 0.1
 α      = 0.8
 β      = 1.5
-#x      = srad(CUDA.CuArray(pyr[1]), 0.3, 0.5, niter; device=device)
-pyr[1]  = diffusion(pyr[1], 0.1, 2.0, niter)
-#pyr[1] = homo_contrast(x, σ, α, β; device=device)
+x      = srad(CUDA.CuArray(pyr[1]), Δt, ρ, niter; device=device)
+#pyr[1]  = diffusion(pyr[1], 0.1, 2.0, niter)
+pyr[1] = x#homo_contrast(x, σ, α, β; device=device)
 
-#x      = srad(CUDA.CuArray(pyr[2]), 0.5, 0.5, niter; device=device)
-pyr[2] = diffusion(pyr[2], 0.1, 1.5, niter)
-#pyr[2] = homo_contrast(x, σ, α, β; device=device)
+x      = srad(CUDA.CuArray(pyr[2]), Δt, ρ, niter; device=device)
+#pyr[2] = diffusion(pyr[2], 0.1, 1.5, niter)
+pyr[2] = x#homo_contrast(x, σ, α, β; device=device)
 
-#x      = srad(CUDA.CuArray(pyr[3]), 1.0, 0.5, niter; device=device)
-pyr[3] = diffusion(pyr[3], 0.1, 1.5, niter)
+x      = srad(CUDA.CuArray(pyr[3]), Δt, ρ, niter; device=device)
+#pyr[3] = diffusion(pyr[3], 0.1, 1.5, niter)
 #pyr[3] = homo_contrast(x, σ, α, β; device=device)
 
-#x      = srad(CUDA.CuArray(pyr[4]), 1.0, 0.3, niter; device=device)
-pyr[4] = diffusion(pyr[4], 0.1, 1.5, niter)
-#pyr[4] = homo_contrast(x, σ, α, β; device=device)
+x      = srad(CUDA.CuArray(pyr[4]), Δt, ρ, niter; device=device)
+#pyr[4] = diffusion(pyr[4], 0.1, 1.5, niter)
+pyr[4] = x#homo_contrast(x, σ, α, β; device=device)
 
 img  = synthesize_pyramid(pyr, factor)
 

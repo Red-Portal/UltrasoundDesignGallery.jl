@@ -11,8 +11,7 @@ function map_laplace(data::Matrix{<:Real},
     B = nothing
     K = nothing
     function f(x)
-        θ = exp.(x)
-        K = compute_gram_matrix(data, θ[1], θ[2], θ[3:end])   
+        K = compute_gram_matrix(data, x[1], x[2], x[3:end])   
         try
             K          = PDMats.PDMat(K)
             μ, Σ, a, B = laplace_approximation(K, choices, zeros(size(data, 2)), scale, verbose=false)
@@ -38,5 +37,5 @@ function map_laplace(data::Matrix{<:Real},
         @info(opt_res)
     end
     θ_opt = Optim.maximizer(opt_res)
-    exp.(θ_opt), μ, Σ, a, B, K
+    θ_opt, μ, Σ, a, B, K
 end
