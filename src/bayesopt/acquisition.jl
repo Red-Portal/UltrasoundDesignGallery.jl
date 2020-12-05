@@ -1,5 +1,5 @@
 
-function expected_improvement(x::Vector,
+function expected_improvement(x::AbstractVector,
                               y_opt::Real,
                               X::Matrix,
                               K::Array{PDMats.PDMat},
@@ -17,7 +17,7 @@ function expected_improvement(x::Vector,
     mean(ei)
 end
 
-function expected_improvement(x::Vector,
+function expected_improvement(x::AbstractVector,
                               y_opt::Real,
                               X::Matrix,
                               K::PDMats.PDMat,

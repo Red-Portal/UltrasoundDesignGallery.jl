@@ -2,12 +2,12 @@
 function precompute_lgp(θs::Matrix)
     ks      = Array{KernelFunctions.Kernel}(undef, size(θs, 2))
     for idx = 1:size(θs, 2)
-        ks[idx] = construct_kernel(θs[:,idx]...) 
+        ks[idx] = construct_kernel(θs[1,idx], θs[2,idx], θs[3:end,idx],)
     end
     ks
 end
 
-@inline function gp_predict(x::Vector,
+@inline function gp_predict(x::AbstractVector,
                             X::Matrix,
                             K::PDMats.PDMat,
                             a::Vector,
@@ -18,7 +18,7 @@ end
     μ, σ²
 end
 
-@inline function gp_predict(x::Matrix,
+@inline function gp_predict(x::AbstractMatrix,
                             X::Matrix,
                             K::PDMats.PDMat,
                             a::Vector,
@@ -29,7 +29,7 @@ end
     μ, σ²
 end
 
-@inline function gp_predict(x::Vector,
+@inline function gp_predict(x::AbstractVector,
                             X::Matrix,
                             K::Array{PDMats.PDMat},
                             a::Matrix,
@@ -48,7 +48,7 @@ end
     mean(μs), mean(σ²s)
 end
 
-@inline function gp_predict(x::Matrix,
+@inline function gp_predict(x::AbstractMatrix,
                             X::Matrix,
                             K::Array{PDMats.PDMat},
                             a::Matrix,

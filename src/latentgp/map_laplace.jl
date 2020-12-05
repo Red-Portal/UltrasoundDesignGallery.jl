@@ -12,7 +12,7 @@ function map_laplace(data::Matrix{<:Real},
     K = nothing
     function f(x)
         θ = exp.(x)
-        K = compute_gram_matrix(data, θ[1], θ[2], θ[3])   
+        K = compute_gram_matrix(data, θ[1], θ[2], θ[3:end])   
         try
             K          = PDMats.PDMat(K)
             μ, Σ, a, B = laplace_approximation(K, choices, zeros(size(data, 2)), scale, verbose=false)
@@ -20,12 +20,12 @@ function map_laplace(data::Matrix{<:Real},
             mll        = loglike + dot(a, μ)/-2 + logdet(B)/-2 + logpdf(θ_prior, x)
             return mll
         catch err
-            if(isa(err, LinearAlgebra.PosDefException))
+            #if(isa(err, LinearAlgebra.PosDefException))
                 @warn "Cholesky failed. Rejecting proposal"
                 return -Inf
-            else
-                throw(err)
-            end
+            #else
+            #    throw(err)
+            #end
         end
     end
 

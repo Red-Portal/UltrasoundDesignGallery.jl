@@ -4,10 +4,6 @@ using DrWatson
 
 include("../src/UltrasoundDesignGallery.jl")
 
-#import .UltrasoundVisualGallery
-
-#const USVG = UltrasoundVisualGallery
-
 function lerp(x::Real, lo::Real, hi::Real)
     return hi*x + (1-x)*lo
 end
@@ -66,7 +62,7 @@ function reduce_speckle(img, θ)
     i      = 1 
 
     x      = srad(CUDA.CuArray(pyr[1]), θ[i], θ[i+1], floor(Int, θ[i+2]); device=device)
-    pyr[1] = x#homo_contrast(x, θ[i+3], θ[i+4], θ[i+5]; device=device)
+    #pyr[1] = homo_contrast(x, θ[i+3], θ[i+4], θ[i+5]; device=device)
     i     += 3
 
     x      = srad(CUDA.CuArray(pyr[2]), θ[i], θ[i+1], floor(Int, θ[i+2]); device=device)
@@ -93,6 +89,5 @@ function main()
     f = (image, x)->begin
         reduce_speckle(image, transform_domain(x))
     end
-
     create_ui(MersenneTwister(1), 21, f)
 end

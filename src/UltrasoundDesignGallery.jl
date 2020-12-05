@@ -16,13 +16,13 @@ import FileIO
 import Gtk
 import Gtk.GConstants
 import Gtk.ShortNames
-import Reactive
 import GtkReactive
 import ImageCore
 import ImageFiltering
 import ImageTransformations
 import ImageView
 import Images
+import JLD
 import KernelFunctions
 import LineSearches
 import NLopt
@@ -32,6 +32,7 @@ import Optim
 import PDMats
 import ProgressMeter
 import REPL.TerminalMenus
+import Reactive
 
 include("latentgp/likelihood.jl")
 include("latentgp/laplace.jl")

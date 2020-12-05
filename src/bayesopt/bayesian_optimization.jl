@@ -1,31 +1,70 @@
 
-function append_choice!(r::Real, x_prev::Vector, x_query::Vector, gp_state::Dict)
+function append_choice!(r::Real, x1::Vector, x1_idx::Int, x2::Vector, gp_state::Dict)
     # This part is pretty ugly, but can't help it
     data_x = gp_state[:data_x]
     data_c = gp_state[:data_c]
 
-    x_choice = r*x_prev + (1-r)*x_query
-    if(abs(r - 1.0) < 0.02)
-        x_mid  = (x_prev + x_query) / 2
-        data_x = hcat(data_x, reshape(x_mid,    (:,1)))
-        data_x = hcat(data_x, reshape(x_query,  (:,1)))
-    elseif(abs(r - 0.0) < 0.02)
-        x_mid  = (x_prev + x_query) / 2
-        data_x = hcat(data_x, reshape(x_mid,    (:,1)))
-        data_x = hcat(data_x, reshape(x_query,  (:,1)))
-    else
-        data_x = hcat(data_x, reshape(x_query,  (:,1)))
-        data_x = hcat(data_x, reshape(x_choice, (:,1)))
-    end
-    choices = begin
-        if(r == 1.0)
-            size(data_x, 2) .+ [-2, 0, -1]
+    choices  = nothing
+    xc = r*x1 + (1-r)*x2
+    xm = (x1 + x2) / 2
+    
+    start_idx = size(data_x, 2) + 1
+    data_new, choices = begin
+        if(abs(r - 1.0) < 0.02)
+            # Corner solution: x1 is favored
+            # [x1 x_mid x2] 
+            x_new   = hcat(xm, x2)
+            choices = [x1_idx, start_idx, start_idx+1]
+            x_new, choices
+        elseif(abs(r - 0.0) < 0.02)
+            # Corner solution: x2 is favored
+            # [x2 x_mid x1] 
+            x_new   = hcat(xm, x2)
+            choices = [start_idx+1, start_idx, x1_idx]
+            x_new, choices
         else
-            size(data_x, 2) .+ [0, -1, -2]
+            # [x_c x1 x2] 
+            x_new   = hcat(x2, xc)
+            choices = [start_idx+1, x1_idx, start_idx]
+            x_new, choices
         end
     end
-    data_c = vcat(data_c, reshape(choices, (1,3)))
+    data_x = hcat(data_x, data_new)
+    data_c = vcat(data_c, reshape(choices, (1, 3)))
+    gp_state[:data_x] = data_x
+    gp_state[:data_c] = data_c
+end
 
+function append_choice!(r::Real, x1::Vector, x2::Vector, gp_state::Dict)
+    # This part is pretty ugly, but can't help it
+    data_x = gp_state[:data_x]
+    data_c = gp_state[:data_c]
+
+    choices  = nothing
+    xc = r*x1 + (1-r)*x2
+    xm = (x1 + x2) / 2
+    
+    start_idx = size(data_x, 2) + 1
+    data_new, choices = begin
+        if(abs(r - 1.0) < 0.02)
+            # Corner solution: x1 is favored
+            x_new   = hcat(xm, x2, x1)
+            choices = [start_idx+2, start_idx+1, start_idx]
+            x_new, choices
+        elseif(abs(r - 0.0) < 0.02)
+            # Corner solution: x2 is favored
+            x_new   = hcat(xm, x1, x2)
+            choices = [start_idx+2, start_idx+1, start_idx]
+            x_new, choices
+        else
+            # [x_c x1 x2] 
+            x_new   = hcat(x1, x2, xc)
+            choices = [start_idx+2, start_idx+1, start_idx]
+            x_new, choices
+        end
+    end
+    data_x = hcat(data_x, data_new)
+    data_c = vcat(data_c, reshape(choices, (1, 3)))
     gp_state[:data_x] = data_x
     gp_state[:data_c] = data_c
 end
@@ -34,11 +73,14 @@ function train_gp!(prng,
                    gp_state::Dict,
                    mcmc_samples::Int,
                    mcmc_burnin::Int,
+                   mcmc_thin::Int,
                    scale::Real,
                    marginalize::Bool)
-    priors = Product([Normal(0, 1),
-                      Normal(0, 1),
-                      Normal(-2, 2)])
+
+    dims   = size(gp_state[:data_x], 1)
+    priors = Product(
+        vcat([Normal(0, 2), Normal(-2, 2)],
+             [Normal(log(0.5), log(2)) for i = 1:dims]))
 
     if(marginalize)
         θ_init = begin
@@ -53,6 +95,7 @@ function train_gp!(prng,
         θ, f, a, K = pm_ess(prng,
                             mcmc_samples,
                             mcmc_burnin,
+                            mcmc_thin,
                             θ_init,
                             latent_init,
                             priors,
@@ -94,9 +137,9 @@ function prefbo_next_query(prng,
                            search_budget::Int;
                            verbose::Bool=false)
     dims = size(gp_state[:data_x],1)
-    K    = gp_predict[:K]
-    a    = gp_predict[:a]
-    k    = gp_predict[:k]
+    K    = gp_state[:K]
+    a    = gp_state[:a]
+    k    = gp_state[:k]
     X    = gp_state[:data_x]
 
     x_opt, y_opt, opt_idx = optimize_mean(dims, search_budget, X, K, a, k)
@@ -106,7 +149,7 @@ function prefbo_next_query(prng,
 
     x1 = x_opt 
     x2 = x_sol
-    x1, x2
+    x1, opt_idx, x2
 end
 
 # function prefbo_linesearch(objective_linesearch,

@@ -2,12 +2,11 @@
 function window_signals!(widgets, signals)
     signals[:slider] = map(GtkReactive.value, widgets[:slider])
 
-    # button_signal = GtkReactive.Signal(false)
-    # Gtk.signal_connect(widgets[:button].widget, :clicked) do widget
-    #     push!(button_signal, true)
-    #     push!(button_signal, false)
-    # end
-    # signals[:button_done] = button_signal
+    button_signal = GtkReactive.Signal(false)
+    Gtk.signal_connect(widgets[:button].widget, :clicked) do widget
+        push!(button_signal, true)
+    end
+    signals[:button_done] = button_signal
 end
 
 function create_window(name::String, canvassize::Tuple{Int,Int})
@@ -17,7 +16,7 @@ function create_window(name::String, canvassize::Tuple{Int,Int})
     win     = Gtk.Window(name, winsize...)
     ImageView.window_wrefs[win] = nothing
     Gtk.signal_connect(win, :destroy) do w
-        delete!(ImageView.window_wrefs, win)
+        exit()
     end
 
     vbox = Gtk.Box(:v)

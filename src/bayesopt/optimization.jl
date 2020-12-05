@@ -14,8 +14,8 @@ function optimize_acquisition(dim::Int64,
         α,
         x_hint,
         0.5*√(dim);
-        lower=ones(dim),
-        upper=zeros(dim),
+        lower=zeros(dim),
+        upper=ones(dim),
         seed=prng.seed[1],
         xtol=1e-4,
         ftol=1e-5,
@@ -34,7 +34,7 @@ function optimize_mean(dim::Int64,
                        max_feval::Int64,
                        X::Matrix,
                        K, a, k)
-    data_μs = [ gp_predict(X[:,i], X, K, a, k) for i = 1:size(X,2) ]
+    data_μs = [ gp_predict(X[:,i], X, K, a, k)[1] for i = 1:size(X,2) ]
     opt_idx    = argmax(data_μs)
     x_opt      = X[:,opt_idx]
     y_opt      = data_μs[opt_idx]

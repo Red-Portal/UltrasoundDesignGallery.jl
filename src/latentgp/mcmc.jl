@@ -1,12 +1,12 @@
 
-function pseudo_marginal_full(prng, data, choices, scale, ℓ², σ², ϵ², u)
+function pseudo_marginal_full(prng, data, choices, scale, σ², ϵ², ℓ², u)
 #=
     Filippone, Maurizio, and Mark Girolami. 
     "Pseudo-marginal Bayesian inference for Gaussian processes." 
     IEEE Transactions on Pattern Analysis and Machine Intelligence (2014)
 =##
     try 
-        K          = compute_gram_matrix(data, ℓ², σ², ϵ²)
+        K          = compute_gram_matrix(data, σ², ϵ², ℓ²)
         K          = PDMats.PDMat(K)
         μ, Σ, a, B = laplace_approximation(K, choices, zeros(length(u)), scale;
                                            verbose=false)
@@ -17,12 +17,14 @@ function pseudo_marginal_full(prng, data, choices, scale, ℓ², σ², ϵ², u)
         logpml     = joint - logpdf(q, f_sample)
         return logpml, f_sample, q, K, Σ, a
     catch err
-        if(isa(err, LinearAlgebra.PosDefException))
-            @warn "Cholesky failed. Rejecting proposal"
-            return -Inf, nothing, nothing, nothing, nothing, nothing
-        else
-            throw(err)
-        end
+        # if(isa(err, LinearAlgebra.PosDefException))
+        #     @warn "Cholesky failed. Rejecting proposal"
+        #     return -Inf, nothing, nothing, nothing, nothing, nothing
+        # else
+        #     throw(err)
+        # end
+        @warn "Cholesky or determinant failed. Rejecting proposal"
+        return -Inf, nothing, nothing, nothing, nothing, nothing
     end
 end
 
@@ -89,6 +91,7 @@ end
 function pm_ess(prng,
                 samples::Int,
                 warmup::Int,
+                thinning::Int,
                 initial_θ::Vector{<:Real},
                 initial_f::Vector{<:Real},
                 prior,
@@ -110,7 +113,8 @@ function pm_ess(prng,
 
     θ_map, f, Σ, a, B, K = map_laplace(data, choices, initial_θ, scale, prior;
                                        verbose=true)
-    θ      = log.(θ_map)
+
+    θ      = log.(initial_θ)
     u      = rand(prng, u_prior)
     q      = MvNormal(f, Σ)
     logpml = pseudo_marginal_partial(prng, choices, q, K, scale, u)
@@ -128,7 +132,7 @@ function pm_ess(prng,
             θ_lin = exp.(θ_in)
             logpml, f, q, K, Σ, a = pseudo_marginal_full(
                 prng, data, choices, scale,
-                θ_lin[1], θ_lin[2], θ_lin[3], u)
+                θ_lin[1], θ_lin[2], θ_lin[3:end], u)
             logpml
         end
         θ, logpml, θ_nprop = ess_transition(prng, Lθ, θ, logpml, prior)
@@ -152,5 +156,10 @@ function pm_ess(prng,
                               (:θ_average_acceptance, θ_acc_mavg.μ)
                               ])
     end
+    θ_samples = θ_samples[:,1:thinning:end]
+    f_samples = f_samples[:,1:thinning:end]
+    a_samples = a_samples[:,1:thinning:end]
+    K_samples = K_samples[1:thinning:end]
+
     θ_samples, f_samples, a_samples, K_samples
 end
